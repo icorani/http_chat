@@ -68,3 +68,14 @@ python run.py
 
 ![WS /ws](http://localhost:6088/ws) - WebSocket endpoint для чата
 
+### 4. Сборка и запуск Docker
+
+```bash
+# Сборка образа
+docker build -t websocket-chat .
+
+# Запуск контейнера
+docker run -d -p 8000:8000 --name websocket-chat websocket-chat
+
+# Или через docker-compose
+docker-compose up -d
