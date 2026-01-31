@@ -18,7 +18,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory="app/static/"), name="static")
 
 
 class ConnectionManager:
@@ -89,7 +89,7 @@ manager = ConnectionManager()
 @app.get("/")
 async def read_root():
     logger.debug("Запрос главной страницы")
-    return FileResponse("static/index.html")
+    return FileResponse("app/static/index.html")
 
 
 @app.websocket("/ws")
