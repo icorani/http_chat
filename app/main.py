@@ -9,7 +9,7 @@ app = FastAPI(
 )
 
 # Статика (CSS, JS, изображения)
-app.mount("/static", StaticFiles(directory="static/"), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Главная страница - отдаем index.html из статики
 @app.get("/")
