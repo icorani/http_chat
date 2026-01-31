@@ -8,25 +8,32 @@
 
 ## Особенности
 
-- Real-time обмен сообщениями через WebSocket
+- Обмен сообщениями через WebSocket
 - Автоматическая нумерация сообщений (с 1)
 - Сброс нумерации при перезагрузке страницы
 - JSON формат обмена данными
 - Динамическое обновление без перезагрузки
 - Автоматическое переподключение при потере связи
-- Современный минималистичный UI
+- Приложение упаковано в Docker
 
 ## Структура проекта
+```
 websocket-chat/
-├── app/
-│ ├── main.py # FastAPI приложение + WebSocket
-│ └── static/
-│ ├── index.html # HTML страница
-│ ├── style.css # Стили
-│ └── app.js # JavaScript логика
-├── run.py # Скрипт запуска
-├── requirements.txt # Зависимости Python
-└── README.md
+├── app/                          # Основное приложение
+│   ├── __init__.py
+│   ├── main.py                   # FastAPI приложение + WebSocket
+│   └── static/                   # Статические файлы
+│       ├── index.html            # HTML страница чата
+│       ├── style.css             # CSS стили
+│       └── app.js                # JavaScript логика
+├── run.py                        # Скрипт запуска сервера
+├── requirements.txt              # Python зависимости
+├── Dockerfile                    # Docker образ
+├── docker-compose.yml            # Docker Compose конфигурация
+├── .dockerignore                 # Игнорируемые файлы для Docker
+├── .gitignore                    # Игнорируемые файлы для Git
+└── README.md                     # Документация
+```
 
 ## Быстрый старт
 
@@ -68,3 +75,14 @@ python run.py
 
 ![WS /ws](http://localhost:6088/ws) - WebSocket endpoint для чата
 
+### 4. Сборка и запуск Docker
+
+```bash
+# Сборка образа
+docker build -t websocket-chat .
+
+# Запуск контейнера
+docker run -d -p 8000:8000 --name websocket-chat websocket-chat
+
+# Или через docker-compose
+docker-compose up -d

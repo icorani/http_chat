@@ -1,0 +1,17 @@
+services:
+  websocket-chat:
+    build: .
+    container_name: websocket-chat
+    ports:
+      - "6088:6088"
+    environment:
+      - PORT=6088
+      - HOST=0.0.0.0
+    volumes:
+      - ./app:/app/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=2)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
