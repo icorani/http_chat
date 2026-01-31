@@ -6,8 +6,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
-COPY run.py .
+COPY start_server.py .
 
-EXPOSE 8000
+EXPOSE 6088
 
 CMD ["python", "start_server.py"]
