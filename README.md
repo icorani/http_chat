@@ -6,63 +6,53 @@
 
 Реализация веб-чата с использованием WebSocket, FastAPI и чистого JavaScript. Сообщения автоматически нумеруются начиная с 1, нумерация сбрасывается при перезагрузке страницы.
 
-## Особенности
+### 1. Особенности
 
 - Обмен сообщениями через WebSocket
-- Автоматическая нумерация сообщений (с 1)
-- Сброс нумерации при перезагрузке страницы
+- Автоматическая нумерация сообщений отправленных клиентом
+- Итентификация клиентов по UUID
+- Сброс нумерации сообщений при обновлении страницы
+- После обновления/открытия страницы клиент считается подключившимся зановоно. Новый UUID
 - JSON формат обмена данными
 - Динамическое обновление без перезагрузки
 - Автоматическое переподключение при потере связи
-- Приложение упаковано в Docker
+- Приложение упаковано в Docker, запуск через docker compose
 
-## Структура проекта
+### 2. Структура проекта
 ```
-http-chat/
-├── app/                          # Основное приложение
-│   ├── __init__.py
-│   ├── main.py                   # FastAPI приложение + WebSocket
-│   └── static/                   # Статические файлы
-│       ├── index.html            # HTML страница чата
-│       ├── style.css             # CSS стили
-│       └── app.js                # JavaScript логика
-├── start_server.py               # Скрипт запуска сервера
-├── requirements.txt              # Python зависимости
-├── Dockerfile                    # Docker образ
-├── docker-compose.yml            # Docker Compose конфигурация
-├── .dockerignore                 # Игнорируемые файлы для Docker
-├── .gitignore                    # Игнорируемые файлы для Git
-└── README.md                     # Документация
+http_chat/                  # Корень проекта
+├── app/                    # Основное приложение
+│   ├── static/             # Статические файлы
+│   │   ├── app.js          # JavaScript фронтенд
+│   │   ├── index.html      # HTML интерфейс чата
+│   │   └── style.css       # CSS стили
+│   ├── __init__.py         # Пакет app
+│   ├── connection_manager.py # Менеджер WebSocket соединений
+│   ├── database.py         # Настройка и подключение к БД
+│   ├── main.py             # Основной FastAPI application
+│   ├── models.py           # SQLAlchemy модели БД
+│   └── schemas.py          # Pydantic схемы для валидации
+├── .dockerignore           # Исключения для Docker
+├── .gitignore              # Исключения для Git
+├── docker-compose.yaml     # Docker Compose конфигурация
+├── Dockerfile              # Docker образ приложения
+├── README.md               # Документация проекта
+├── requirements.txt        # Зависимости Python
+└── start_server.py         # Скрипт запуска сервера
 ```
 
-## Быстрый старт
 
-### 1. Установка зависимостей
+### 3. Запуск сервера через Docker Compose
+Порт для сервера в переменных окружения docker compose
+Также в переменных статус определяется DEBUG 
+При запуске поднимается uvicorn server для FastAPI приложения и postgres сервер для хранения данных.
 
 ```bash
-# Клонировать репозиторий
-git clone <your-repo-url>
-cd http-chat
-
-# Создать виртуальное окружение
-python3 -m venv .venv
-
-# Активировать (Linux/Mac)
-source .venv/bin/activate
-
-# Активировать (Windows)
-venv\Scripts\activate
-
-# Установить зависимости
-pip install -r requirements.txt
+# Запуск через docker-compose
+docker compose up -d --build
 ```
-### 2. Запуск сервера
-```bash
-python3 start_server.py
-```
-Сервер запустится на http://localhost:6088
 
-### 3. API Endpoints
+### 4. API Endpoints
 [GET /](http://localhost:6088) - Главная страница чата
 
 [GET /docs](http://localhost:6088/docs) - Документация Swagger UI
@@ -75,9 +65,11 @@ python3 start_server.py
 
 [WS /ws](http://localhost:6088/ws) - WebSocket endpoint для чата
 
-### 4. Запуск Docker Compose
 
-```bash
-# Запуск через docker-compose
-docker-compose up -d --build
-```
+### 5. Запуск в окружении через start_server.
+Необходимо установить зависимости, при необходимости задать переменные окружения, обеспечить корректное подключение к БД.
+Дефолтные настройки:
+- HOST = "0.0.0.0"
+- PORT = "6088"
+- DEBUG = "false"
+- DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5433/websocket_chat"

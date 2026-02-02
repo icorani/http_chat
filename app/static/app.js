@@ -1,22 +1,16 @@
-// WebSocket Chat Client с поддержкой сессий и localStorage
+// WebSocket Chat Client (без localStorage, с нумерацией от сервера)
 class WebSocketChat {
     constructor() {
         this.ws = null;
-        this.sessionId = this.generateSessionId();
-        this.currentSessionMessages = 0;
+        this.connectionId = null;
         this.isConnected = false;
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
         this.reconnectDelay = 2000;
         
         this.initializeElements();
-        this.initializeStorage();
         this.initializeEventListeners();
         this.connectWebSocket();
-    }
-    
-    generateSessionId() {
-        return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
     
     initializeElements() {
@@ -28,66 +22,8 @@ class WebSocketChat {
         this.sendBtn = document.getElementById('send-btn');
     }
     
-    initializeStorage() {
-        const stored = localStorage.getItem('websocket_chat_data');
-        if (stored) {
-            try {
-                this.storageData = JSON.parse(stored);
-                if (this.storageData.currentSessionId !== this.sessionId) {
-                    this.storageData.currentSessionId = this.sessionId;
-                    this.saveToStorage();
-                }
-            } catch (e) {
-                console.error('Ошибка чтения localStorage:', e);
-                this.resetStorage();
-            }
-        } else {
-            this.resetStorage();
-        }
-        
-        this.loadMessageHistory();
-    }
-    
-    resetStorage() {
-        this.storageData = {
-            currentSessionId: this.sessionId,
-            messages: []
-        };
-        this.saveToStorage();
-    }
-    
-    saveToStorage() {
-        try {
-            localStorage.setItem('websocket_chat_data', JSON.stringify(this.storageData));
-        } catch (e) {
-            console.error('Ошибка записи в localStorage:', e);
-        }
-    }
-    
-    loadMessageHistory() {
-        const emptyState = this.messagesList.querySelector('.empty-state');
-        if (emptyState) {
-            emptyState.remove();
-        }
-        
-        this.storageData.messages.forEach(msg => {
-            this.addMessageToDOM(msg, false);
-        });
-        
-        this.currentSessionMessages = this.storageData.messages.filter(
-            msg => msg.sessionId === this.sessionId
-        ).length;
-        
-        this.updateMessageCount();
-    }
-    
     initializeEventListeners() {
         this.form.addEventListener('submit', (e) => this.handleSubmit(e));
-        
-        const clearBtn = document.getElementById('clear-history');
-        if (clearBtn) {
-            clearBtn.addEventListener('click', () => this.clearHistory());
-        }
     }
     
     connectWebSocket() {
@@ -110,26 +46,90 @@ class WebSocketChat {
     }
     
     handleOpen() {
-        console.log('WebSocket подключен');
+        console.log('WebSocket подключен, ожидаем инициализации от сервера...');
         this.isConnected = true;
         this.reconnectAttempts = 0;
-        this.updateStatus('connected', 'Подключено');
+        this.updateStatus('connected', 'Подключено (ожидание данных...)');
     }
     
     handleMessage(event) {
-        console.log('Получено сообщение:', event.data);
+        console.log('Получено сообщение от сервера:', event.data);
         
         try {
             const data = JSON.parse(event.data);
             
-            if (data.type === 'message') {
-                this.addMessageToList(data.id, data.text);
-            } else if (data.type === 'error') {
-                this.showError(data.message);
+            switch (data.type) {
+                case 'init':
+                    this.handleInit(data);
+                    break;
+                case 'message':
+                    this.handleNewMessage(data);
+                    break;
+                case 'history':
+                    this.handleHistory(data.messages);
+                    break;
+                case 'error':
+                    this.showError(data.message);
+                    break;
+                default:
+                    console.warn('Неизвестный тип сообщения:', data.type);
             }
         } catch (error) {
-            console.error('Ошибка обработки сообщения:', error);
+            console.error('Ошибка обработки сообщения:', error, event.data);
         }
+    }
+    
+    handleInit(data) {
+        this.connectionId = data.connection_id;
+        console.log(`Инициализация. Connection ID: ${this.connectionId}`);
+        
+        this.updateStatus('connected', 'Подключено');
+        
+        // Очищаем список сообщений перед загрузкой истории
+        this.clearMessagesList();
+        
+        // Загружаем историю сообщений
+        if (data.history && data.history.length > 0) {
+            this.handleHistory(data.history);
+        }
+    }
+    
+    handleHistory(messages) {
+        console.log(`Загружаем историю: ${messages.length} сообщений`);
+        
+        // Сортируем по времени (старые -> новые) для правильного отображения
+        const sortedMessages = [...messages].sort((a, b) => 
+            new Date(a.created_at) - new Date(b.created_at)
+        );
+        
+        // Отображаем каждое сообщение
+        sortedMessages.forEach(msg => {
+            this.addMessageToDOM({
+                text: msg.text,
+                connectionId: msg.connection_id,
+                messageNumber: msg.user_message_number,
+                isOwn: msg.connection_id === this.connectionId,
+                timestamp: msg.created_at || new Date().toISOString()
+            }, false);
+        });
+        
+        // Прокручиваем к последнему сообщению
+        this.scrollToBottom();
+    }
+    
+    handleNewMessage(data) {
+        console.log('Новое сообщение:', data);
+        
+        this.addMessageToDOM({
+            text: data.text,
+            connectionId: data.connection_id,
+            messageNumber: data.user_message_number,
+            isOwn: data.connection_id === this.connectionId,
+            timestamp: data.created_at || new Date().toISOString()
+        }, true);
+        
+        // Обновляем счетчик сообщений если есть
+        this.updateMessageCount();
     }
     
     handleError(error) {
@@ -140,6 +140,7 @@ class WebSocketChat {
     handleClose(event) {
         console.log('WebSocket отключен:', event.code, event.reason);
         this.isConnected = false;
+        this.connectionId = null;
         this.updateStatus('disconnected', 'Отключено');
         
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -169,6 +170,11 @@ class WebSocketChat {
             return;
         }
         
+        if (!this.connectionId) {
+            this.showError('Ожидаем инициализацию от сервера');
+            return;
+        }
+        
         this.sendMessage(message);
         this.input.value = '';
         this.input.focus();
@@ -176,8 +182,8 @@ class WebSocketChat {
     
     sendMessage(text) {
         const message = {
-            text: text,
-            timestamp: new Date().toISOString()
+            type: 'message',
+            text: text
         };
         
         try {
@@ -189,32 +195,19 @@ class WebSocketChat {
         }
     }
     
-    addMessageToList(id, text) {
-        this.currentSessionMessages++;
-        
-        const messageData = {
-            text: text,
-            sessionId: this.sessionId,
-            timestamp: new Date().toISOString(),
-            messageNumber: this.currentSessionMessages
-        };
-        
-        this.storageData.messages.push(messageData);
-        this.saveToStorage();
-        
-        this.addMessageToDOM(messageData, true);
-        this.updateMessageCount();
-    }
-    
     addMessageToDOM(messageData, animate = true) {
-        const isCurrentSession = messageData.sessionId === this.sessionId;
-        const hasNumber = isCurrentSession && messageData.messageNumber;
+        // Убираем состояние "пусто" если есть
+        const emptyState = this.messagesList.querySelector('.empty-state');
+        if (emptyState) {
+            emptyState.remove();
+        }
         
         const messageElement = document.createElement('div');
         messageElement.className = 'message-item';
         
-        if (!isCurrentSession) {
-            messageElement.classList.add('previous-session');
+        // Добавляем класс для чужих сообщений
+        if (!messageData.isOwn) {
+            messageElement.classList.add('other-user');
         }
         
         if (animate) {
@@ -225,10 +218,10 @@ class WebSocketChat {
         const timeStr = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
         
         let headerHTML = '';
-        if (hasNumber) {
+        if (messageData.isOwn && messageData.messageNumber) {
             headerHTML = `<span class="message-id">#${messageData.messageNumber}</span>`;
-        } else if (!isCurrentSession) {
-            headerHTML = `<span class="session-label">(предыдущая сессия)</span>`;
+        } else if (!messageData.isOwn) {
+            headerHTML = `<span class="user-label">${this.getUserLabel(messageData.connectionId)}</span>`;
         }
         
         messageElement.innerHTML = `
@@ -239,16 +232,25 @@ class WebSocketChat {
             <div class="message-text">${this.escapeHtml(messageData.text)}</div>
         `;
         
-        this.messagesList.prepend(messageElement);
+        this.messagesList.appendChild(messageElement);
+        
+        // Прокручиваем к новому сообщению
+        messageElement.scrollIntoView({ behavior: 'smooth' });
     }
     
-    clearHistory() {
-        if (confirm('Очистить всю историю сообщений?')) {
-            this.resetStorage();
-            this.messagesList.innerHTML = '<div class="empty-state">Сообщений пока нет</div>';
-            this.currentSessionMessages = 0;
-            this.updateMessageCount();
-        }
+    getUserLabel(connectionId) {
+        // Создаем короткий идентификатор пользователя на основе connectionId
+        if (!connectionId) return 'Аноним';
+        const shortId = connectionId.substring(0, 6);
+        return `Пользователь ${shortId}`;
+    }
+    
+    clearMessagesList() {
+        this.messagesList.innerHTML = '<div class="empty-state">Загрузка истории...</div>';
+    }
+    
+    scrollToBottom() {
+        this.messagesList.scrollTop = this.messagesList.scrollHeight;
     }
     
     showError(message) {
@@ -257,6 +259,8 @@ class WebSocketChat {
         const errorElement = document.createElement('div');
         errorElement.className = 'error-message';
         errorElement.textContent = `Ошибка: ${message}`;
+        
+        // Добавляем стили инлайн чтобы не зависеть от CSS
         errorElement.style.cssText = `
             background: #fee;
             color: #c00;
@@ -266,7 +270,14 @@ class WebSocketChat {
             border-left: 4px solid #c00;
         `;
         
-        this.messagesList.prepend(errorElement);
+        // Вставляем ошибку в начало списка сообщений
+        if (this.messagesList.firstChild) {
+            this.messagesList.insertBefore(errorElement, this.messagesList.firstChild);
+        } else {
+            this.messagesList.appendChild(errorElement);
+        }
+        
+        // Удаляем через 5 секунд
         setTimeout(() => {
             if (errorElement.parentNode) {
                 errorElement.remove();
@@ -275,6 +286,8 @@ class WebSocketChat {
     }
     
     updateStatus(status, text) {
+        if (!this.statusText) return;
+        
         this.statusText.textContent = text;
         
         const colors = {
@@ -285,22 +298,24 @@ class WebSocketChat {
             failed: '#6c757d'
         };
         
-        this.statusDot.style.backgroundColor = colors[status] || '#6c757d';
-        
-        if (status === 'connected') {
-            this.statusDot.style.animation = 'none';
-        } else {
-            this.statusDot.style.animation = 'pulse 2s infinite';
+        if (this.statusDot) {
+            this.statusDot.style.backgroundColor = colors[status] || '#6c757d';
+            
+            if (status === 'connected') {
+                this.statusDot.style.animation = 'none';
+            } else {
+                this.statusDot.style.animation = 'pulse 2s infinite';
+            }
         }
     }
     
     updateMessageCount() {
+        // Можно добавить счетчик сообщений если нужно
         const countElement = document.getElementById('message-count');
         if (countElement) {
-            const currentCount = this.storageData.messages.filter(
-                msg => msg.sessionId === this.sessionId
-            ).length;
-            countElement.textContent = currentCount;
+            const messages = this.messagesList.querySelectorAll('.message-item');
+            const myMessages = this.messagesList.querySelectorAll('.message-item:not(.other-user)');
+            countElement.textContent = `${myMessages.length}/${messages.length}`;
         }
     }
     
