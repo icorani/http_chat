@@ -1,171 +1,189 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+"""
+FastAPI WebSocket chat with message numbering per connection.
+"""
+import os
 import json
 import logging
+from uuid import UUID
+from contextlib import asynccontextmanager
 
-# Настраиваем логирование
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .database import get_db, init_db
+from .connection_manager import ConnectionManager
+from .schemas import MessageCreate, MessageResponse, InitResponse, ErrorResponse
+
 logger = logging.getLogger("websocket_chat")
+logger.setLevel(logging.DEBUG if os.getenv("DEBUG") == "true" else logging.INFO)
 
-app = FastAPI(
-    title="WebSocket Chat API",
-    description="Чат с WebSocket и нумерацией сообщений",
-    version="1.0.0"
-)
-
-app.mount("/static", StaticFiles(directory="app/static/"), name="static")
-
-
-class ConnectionManager:
-    """
-    Connection manager for WebSocket connections.
-
-    Manages active connections, message numbering, and message distribution.
-
-    Attributes:
-        active_connections: List of active WebSocket connections
-        message_counter: Sequential message ID counter
-
-    Methods:
-        connect(websocket: WebSocket) -> None:
-            Accept new WebSocket connection
-        disconnect(websocket: WebSocket) -> None:
-            Remove WebSocket connection
-        get_next_message_id() -> int:
-            Get next sequential message ID
-        send_personal_message(message: str, websocket: WebSocket) -> None:
-            Send message to specific client
-        broadcast(message: str) -> None:
-            Broadcast message to all connected clients
-    """
-    def __init__(self):
-        self.active_connections = []
-        self.message_counter = 0
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-        logger.info(f"Новое подключение WebSocket. Всего: {len(self.active_connections)}")
-
-    def disconnect(self, websocket: WebSocket):
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
-        logger.info(f"Отключение WebSocket. Осталось: {len(self.active_connections)}")
-
-    def get_next_message_id(self):
-        self.message_counter += 1
-        logger.debug(f"Сгенерирован ID сообщения: {self.message_counter}")
-        return self.message_counter
-
-    async def send_personal_message(self, message: str, websocket: WebSocket):
-        try:
-            await websocket.send_text(message)
-            logger.debug(f"Отправлено персональное сообщение")
-        except Exception as e:
-            logger.error(f"Ошибка отправки сообщения: {e}")
-
-    async def broadcast(self, message: str):
-        successful = 0
-        failed = 0
-        for connection in self.active_connections:
-            try:
-                await connection.send_text(message)
-                successful += 1
-            except Exception as e:
-                failed += 1
-                logger.warning(f"Не удалось отправить broadcast: {e}")
-        if successful > 0 or failed > 0:
-            logger.info(f"Broadcast: успешно {successful}, неудачно {failed}")
-
+static_path = os.path.join(os.path.dirname(__file__), "static")
 
 manager = ConnectionManager()
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan management."""
+    logger.info("🚀 Starting WebSocket chat")
+    
+    # ИНИЦИАЛИЗИРУЕМ БАЗУ ДАННЫХ ПЕРЕД ЗАПУСКОМ
+    try:
+        logger.info("📦 Initializing database...")
+        success = await init_db()
+        if not success:
+            logger.error("❌ Failed to initialize database")
+            raise RuntimeError("Database initialization failed")
+        logger.info("✅ Database initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Database initialization error: {e}")
+        raise
+    
+    yield
+    
+    logger.info("🛑 Stopping WebSocket chat")
+
+app = FastAPI(
+    title="WebSocket Chat API",
+    description="Chat with WebSocket and per-connection message numbering",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Проверяем существование папки static перед монтированием
+if os.path.exists(static_path):
+    app.mount("/static", StaticFiles(directory=static_path), name="static")
+    logger.info(f"✅ Static files mounted at {static_path}")
+else:
+    logger.warning(f"⚠️ Static directory not found: {static_path}")
 
 @app.get("/")
 async def read_root():
-    logger.debug("Запрос главной страницы")
-    return FileResponse("app/static/index.html")
+    """Serve chat interface."""
+    index_path = os.path.join(static_path, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return JSONResponse(
+        status_code=404,
+        content={"error": "index.html not found"}
+    )
 
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    client_ip = websocket.client.host if websocket.client else "unknown"
-    logger.info(f"Инициализация WebSocket соединения от {client_ip}")
-
-    await manager.connect(websocket)
-
+@app.get("/health")
+async def health_check(db: AsyncSession = Depends(get_db)):
+    """Health check endpoint."""
     try:
-        while True:
-            data = await websocket.receive_text()
-            logger.info(f"Получены данные от {client_ip}: {data[:50]}...")
-
-            try:
-                message_data = json.loads(data)
-                text = message_data.get("text", "").strip()
-
-                if not text:
-                    logger.warning(f"Пустое сообщение от {client_ip}")
-                    error_response = {
-                        "type": "error",
-                        "message": "Message text cannot be empty"
-                    }
-                    await manager.send_personal_message(
-                        json.dumps(error_response),
-                        websocket
-                    )
-                    continue
-
-                message_id = manager.get_next_message_id()
-                response = {
-                    "id": message_id,
-                    "text": text,
-                    "type": "message"
-                }
-
-                response_json = json.dumps(response)
-                await manager.send_personal_message(response_json, websocket)
-                logger.info(f"Отправлен ответ {client_ip}: ID={message_id}, текст={text[:30]}...")
-
-            except json.JSONDecodeError as e:
-                logger.error(f"Невалидный JSON от {client_ip}: {e}")
-                error_response = {
-                    "type": "error",
-                    "message": f"Invalid JSON: {str(e)}"
-                }
-                await manager.send_personal_message(
-                    json.dumps(error_response),
-                    websocket
-                )
-            except Exception as e:
-                logger.error(f"Ошибка обработки сообщения от {client_ip}: {e}")
-
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket отключен: {client_ip}")
-        manager.disconnect(websocket)
-        manager.message_counter = 0
-        logger.info("Счетчик сообщений сброшен для новой сессии")
+        from sqlalchemy import text
+        await db.execute(text("SELECT 1"))
+        db_status = True
     except Exception as e:
-        logger.error(f"Неожиданная ошибка WebSocket: {e}")
-        manager.disconnect(websocket)
-
+        logger.error(f"Database connection error: {e}")
+        db_status = False
+    
+    return JSONResponse({
+        "status": "healthy" if db_status else "degraded",
+        "service": "websocket-chat",
+        "database": db_status,
+        "connections": manager.get_connection_count()
+    })
 
 @app.get("/ws-info")
 async def websocket_info():
-    info = {
-        "active_connections": len(manager.active_connections),
-        "message_counter": manager.message_counter,
+    """WebSocket connection information."""
+    return {
+        "active_connections": manager.get_connection_count(),
         "status": "running"
     }
-    logger.debug(f"Запрос информации о WebSocket: {info}")
-    return info
 
-
-@app.get("/health")
-async def health_check():
-    logger.debug("Health check запрос")
-    return {"status": "healthy", "service": "websocket-chat"}
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket, db: AsyncSession = Depends(get_db)):
+    """
+    WebSocket endpoint for chat.
+    
+    Each connection gets unique connection_id and separate message numbering.
+    Numbering resets on reconnection.
+    """
+    client_ip = websocket.client.host if websocket.client else "unknown"
+    logger.info(f"New WebSocket connection from {client_ip}")
+    
+    try:
+        connection_id = await manager.connect(websocket)
+        logger.info(f"Generated connection_id: {connection_id} for {client_ip}")
+        
+        history_messages = await manager.get_message_history(db, limit=50)
+        
+        init_data = InitResponse(
+            connection_id=str(connection_id),
+            history=[
+                MessageResponse(
+                    id=msg.id,
+                    text=msg.text,
+                    connection_id=str(msg.connection_id),
+                    user_message_number=msg.user_message_number,
+                    created_at=msg.created_at,
+                )
+                for msg in history_messages
+            ]
+        )
+        await manager.send_personal_message(init_data.model_dump(), websocket)
+        
+        logger.info(f"Client {client_ip} initialized with {len(history_messages)} history messages")
+        
+        while True:
+            data = await websocket.receive_text()
+            logger.debug(f"Received message from {client_ip}: {data[:100]}...")
+            
+            try:
+                message_data = json.loads(data)
+                
+                if "type" not in message_data:
+                    error = ErrorResponse(message="Missing 'type' field")
+                    await manager.send_personal_message(error.model_dump(), websocket)
+                    continue
+                
+                if message_data["type"] != "message":
+                    error = ErrorResponse(message=f"Unknown message type: {message_data['type']}")
+                    await manager.send_personal_message(error.model_dump(), websocket)
+                    continue
+                
+                try:
+                    message_create = MessageCreate(**message_data)
+                except Exception as e:
+                    error = ErrorResponse(message=f"Invalid data: {e}")
+                    await manager.send_personal_message(error.model_dump(), websocket)
+                    continue
+                
+                message_number = await manager.get_next_message_number(db, connection_id)
+                message = await manager.save_message(
+                    db, 
+                    message_create.text, 
+                    connection_id, 
+                    message_number
+                )
+                
+                response = MessageResponse(
+                    id=message.id,
+                    text=message.text,
+                    connection_id=str(message.connection_id),
+                    user_message_number=message.user_message_number,
+                    created_at=message.created_at,
+                )
+                
+                #await manager.send_personal_message(response.model_dump(), websocket) # personal chats
+                await manager.broadcast(response.model_dump()) #public chat
+                logger.info(f"Message #{message_number} saved for {connection_id}")
+                
+            except json.JSONDecodeError as e:
+                error = ErrorResponse(message=f"Invalid JSON: {e}")
+                await manager.send_personal_message(error.model_dump(), websocket)
+            except Exception as e:
+                logger.error(f"Error processing message from {client_ip}: {e}")
+                error = ErrorResponse(message="Internal server error")
+                await manager.send_personal_message(error.model_dump(), websocket)
+                
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected: {client_ip}")
+        manager.disconnect(websocket)
+    except Exception as e:
+        logger.error(f"Unexpected error in WebSocket endpoint: {e}")
+        manager.disconnect(websocket)

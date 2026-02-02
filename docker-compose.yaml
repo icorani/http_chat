@@ -1,17 +1,38 @@
 services:
+  postgres:
+    image: postgres:18
+    container_name: chat-postgres
+    environment:
+      POSTGRES_DB: websocket_chat
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d websocket_chat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   websocket-chat:
     build: .
     container_name: websocket-chat
     ports:
       - "6088:6088"
     environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/websocket_chat
       - PORT=6088
       - HOST=0.0.0.0
+      - DEBUG=True
+    command: ["python", "start_server.py"]
     volumes:
       - ./app:/app/app
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=2)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+
+volumes:
+  postgres_data:
