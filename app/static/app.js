@@ -97,13 +97,7 @@ class WebSocketChat {
     handleHistory(messages) {
         console.log(`Загружаем историю: ${messages.length} сообщений`);
         
-        // Сортируем по времени (старые -> новые) для правильного отображения
-        const sortedMessages = [...messages].sort((a, b) => 
-            new Date(a.created_at) - new Date(b.created_at)
-        );
-        
-        // Отображаем каждое сообщение
-        sortedMessages.forEach(msg => {
+        messages.forEach(msg => {  
             this.addMessageToDOM({
                 text: msg.text,
                 connectionId: msg.connection_id,
