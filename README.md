@@ -6,7 +6,7 @@
 
 Реализация веб-чата с использованием WebSocket, FastAPI и чистого JavaScript. Сообщения автоматически нумеруются начиная с 1, нумерация сбрасывается при перезагрузке страницы.
 
-## Особенности
+### 1. Особенности
 
 - Обмен сообщениями через WebSocket
 - Автоматическая нумерация сообщений отправленных клиентом
@@ -18,7 +18,7 @@
 - Автоматическое переподключение при потере связи
 - Приложение упаковано в Docker, запуск через docker compose
 
-## Структура проекта
+### 2. Структура проекта
 ```
 http_chat/                  # Корень проекта
 ├── app/                    # Основное приложение
@@ -41,28 +41,8 @@ http_chat/                  # Корень проекта
 └── start_server.py         # Скрипт запуска сервера
 ```
 
-## Быстрый старт
 
-### 1. Установка зависимостей
-
-```bash
-# Клонировать репозиторий
-git clone <your-repo-url>
-cd http-chat
-
-# Создать виртуальное окружение
-python3 -m venv .venv
-
-# Активировать (Linux/Mac)
-source .venv/bin/activate
-
-# Активировать (Windows)
-venv\Scripts\activate
-
-# Установить зависимости
-pip install -r requirements.txt
-```
-### 2. Запуск сервера через Docker Compose
+### 3. Запуск сервера через Docker Compose
 Порт для сервера в переменных окружения docker compose
 Также в переменных статус определяется DEBUG 
 При запуске поднимается uvicorn server для FastAPI приложения и postgres сервер для хранения данных.
@@ -72,7 +52,7 @@ pip install -r requirements.txt
 docker compose up -d --build
 ```
 
-### 3. API Endpoints
+### 4. API Endpoints
 [GET /](http://localhost:6088) - Главная страница чата
 
 [GET /docs](http://localhost:6088/docs) - Документация Swagger UI
@@ -86,3 +66,10 @@ docker compose up -d --build
 [WS /ws](http://localhost:6088/ws) - WebSocket endpoint для чата
 
 
+### 5. Запуск в окружении через start_server.
+Необходимо установить зависимости, при необходимости задать переменные окружения, обеспечить корректное подключение к БД.
+Дефолтные настройки:
+- HOST = "0.0.0.0"
+- PORT = "6088"
+- DEBUG = "false"
+- DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5433/websocket_chat"
