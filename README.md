@@ -26,7 +26,7 @@ websocket-chat/
 │       ├── index.html            # HTML страница чата
 │       ├── style.css             # CSS стили
 │       └── app.js                # JavaScript логика
-├── run.py                        # Скрипт запуска сервера
+├── start_server.py               # Скрипт запуска сервера
 ├── requirements.txt              # Python зависимости
 ├── Dockerfile                    # Docker образ
 ├── docker-compose.yml            # Docker Compose конфигурация
@@ -58,22 +58,22 @@ pip install -r requirements.txt
 ```
 ### 2. Запуск сервера
 ```bash
-python run.py
+python start_server.py
 ```
 Сервер запустится на http://localhost:6088
 
 ### 3. API Endpoints
-![GET /](http://localhost:6088) - Главная страница чата
+[GET /](http://localhost:6088) - Главная страница чата
 
-![GET /docs](http://localhost:6088/docs) - Документация Swagger UI
+[GET /docs](http://localhost:6088/docs) - Документация Swagger UI
 
-![GET /redoc](http://localhost:6088/redoc) - Альтернативная документация
+[GET /redoc](http://localhost:6088/redoc) - Альтернативная документация
 
-![GET /health](http://localhost:6088/health) - Health check
+[GET /health](http://localhost:6088/health) - Health check
 
-![GET /ws-info](http://localhost:6088/ws-info) - Статус WebSocket соединений
+[GET /ws-info](http://localhost:6088/ws-info) - Статус WebSocket соединений
 
-![WS /ws](http://localhost:6088/ws) - WebSocket endpoint для чата
+[WS /ws](http://localhost:6088/ws) - WebSocket endpoint для чата
 
 ### 4. Сборка и запуск Docker
 
