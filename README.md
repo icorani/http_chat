@@ -82,7 +82,7 @@ python start_server.py
 docker build -t websocket-chat .
 
 # Запуск контейнера
-docker run -d -p 8000:8000 --name websocket-chat websocket-chat
+docker run -d -p 6088:6088 --name websocket-chat websocket-chat
 
 # Или через docker-compose
 docker-compose up -d
