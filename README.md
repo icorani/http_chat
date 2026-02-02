@@ -18,7 +18,7 @@
 
 ## Структура проекта
 ```
-websocket-chat/
+http-chat/
 ├── app/                          # Основное приложение
 │   ├── __init__.py
 │   ├── main.py                   # FastAPI приложение + WebSocket
@@ -42,13 +42,13 @@ websocket-chat/
 ```bash
 # Клонировать репозиторий
 git clone <your-repo-url>
-cd websocket-chat
+cd http-chat
 
 # Создать виртуальное окружение
-python -m venv venv
+python3 -m venv .venv
 
 # Активировать (Linux/Mac)
-source venv/bin/activate
+source .venv/bin/activate
 
 # Активировать (Windows)
 venv\Scripts\activate
@@ -58,7 +58,7 @@ pip install -r requirements.txt
 ```
 ### 2. Запуск сервера
 ```bash
-python start_server.py
+python3 start_server.py
 ```
 Сервер запустится на http://localhost:6088
 
@@ -75,14 +75,9 @@ python start_server.py
 
 [WS /ws](http://localhost:6088/ws) - WebSocket endpoint для чата
 
-### 4. Сборка и запуск Docker
+### 4. Запуск Docker Compose
 
 ```bash
-# Сборка образа
-docker build -t websocket-chat .
-
-# Запуск контейнера
-docker run -d -p 6088:6088 --name websocket-chat websocket-chat
-
-# Или через docker-compose
-docker-compose up -d
+# Запуск через docker-compose
+docker-compose up -d --build
+```
